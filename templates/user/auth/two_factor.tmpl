@@ -1,0 +1,27 @@
+{{template "base/head" .}}
+<div class="user tw">
+	<div class="ui middle very relaxed page grid">
+		<div class="column">
+			<form class="ui form" action="{{.Link}}" method="post">
+				{{.CsrfTokenHtml}}
+				<h2 class="ui top attached header">
+					{{.i18n.Tr "auth.two_factor"}}
+				</h2>
+				<div class="ui attached segment">
+					{{template "base/alert" .}}
+          <div class="required inline field {{if .Err_Code}}error{{end}}">
+            <p>{{.i18n.Tr "auth.two_factor_code_description"}}</p>
+						<label for="code">{{.i18n.Tr "auth.two_factor_code"}}</label>
+            <input id="code" name="code" type="text" value="{{.Code}}" autofocus required>
+          </div>
+          <div class="ui divider"></div>
+          <div class="inline field">
+            <label></label>
+            <button class="ui blue button">{{.i18n.Tr "auth.two_factor_attempt"}}</button>
+          </div>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

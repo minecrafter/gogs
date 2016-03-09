@@ -1,0 +1,51 @@
+{{template "base/head" .}}
+<div class="user settings sshkeys">
+	<div class="ui container">
+		<div class="ui grid">
+			{{template "user/settings/navbar" .}}
+			<div class="twelve wide column content">
+				{{template "base/alert" .}}
+				<h4 class="ui top attached header">
+					{{.i18n.Tr "settings.two_factor_enroll"}}
+				</h4>
+				<div class="ui attached segment">
+					<div class="ui key list">
+						<div class="item">
+							{{.i18n.Tr "settings.two_factor_description"}}
+						</div>
+            <div class="item ui grid">
+              <div class="seven wide column center">
+								<h3>{{.i18n.Tr "settings.two_factor_scan_qr"}}</h3>
+                {{$.QRCodeImg}}
+              </div>
+              <div class="seven wide column center">
+                <h3>{{.i18n.Tr "settings.two_factor_secret"}}</h3>
+                <p>{{.Secret}}</p>
+              </div>
+            </div>
+					</div>
+				</div>
+				<div class="ui attached segment">
+					<div class="ui grid">
+						<div class="six wide column">
+							<form class="ui form" action="{{.Link}}" method="post">
+								{{.CsrfTokenHtml}}
+								<div class="required inline field {{if .Err_Code}}error{{end}}">
+									<p>{{.i18n.Tr "settings.two_factor_enter_code"}}</p>
+									<input id="code" name="code" type="text" value="{{.Code}}" autofocus required>
+								</div>
+								<div class="ui divider"></div>
+								<div class="inline field">
+									<label></label>
+									<button class="ui blue button">{{.i18n.Tr "settings.two_factor_verify_code"}}</button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+{{template "base/footer" .}}

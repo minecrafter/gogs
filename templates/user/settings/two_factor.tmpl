@@ -1,0 +1,58 @@
+{{template "base/head" .}}
+<div class="user settings sshkeys">
+	<div class="ui container">
+		<div class="ui grid">
+			{{template "user/settings/navbar" .}}
+			<div class="twelve wide column content">
+				{{template "base/alert" .}}
+				<h4 class="ui top attached header">
+					{{.i18n.Tr "settings.two_factor"}}
+				</h4>
+				<div class="ui attached segment">
+					<div class="ui key list">
+						<div class="item">
+							{{.i18n.Tr "settings.two_factor_description"}}
+						</div>
+            <div class="item ui grid">
+            {{if .Has2FA}}
+              <div class="one wide column">
+                <p>{{$.i18n.Tr "settings.two_factor_active"}}</p>
+                <button class="ui red tiny show-panel button" data-panel="#remove-twofa">
+                  {{$.i18n.Tr "settings.two_factor_deactivate"}}
+                </button>
+              </div>
+            {{else}}
+            <div class="one wide column">
+              <p>{{$.i18n.Tr "settings.two_factor_not_active"}}</p>
+              <button class="ui blue tiny button" data-url="{{$.Link}}/enroll">
+                {{$.i18n.Tr "settings.two_factor_do_enroll"}}
+              </button>
+            </div>
+            {{end}}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="ui small basic delete modal" id="remove-twofa">
+	<div class="ui icon header">
+		<i class="trash icon"></i>
+		{{.i18n.Tr "settings.two_factor_deactivate"}}
+	</div>
+	<div class="content">
+    <p>{{.i18n.Tr "settings.deactivate_two_factor_desc"}}</p>
+    <form class="ui form" id="delete-form" action="{{.Link}}" method="post">
+      {{.CsrfTokenHtml}}
+      <div class="inline required field {{if .Err_Password}}error{{end}}">
+        <label for="password">{{.i18n.Tr "password"}}</label>
+        <input id="password" name="password" type="password" autofocus required>
+      </div>
+      <div class="ui red button delete-button" data-type="form" data-form="#delete-form">
+        {{.i18n.Tr "settings.confirm_deactivate_two_factor"}}
+      </div>
+    </form>
+	</div>
+</div>
+{{template "base/footer" .}}

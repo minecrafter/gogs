@@ -16,6 +16,9 @@
 		<a class="{{if .PageIsSettingsApplications}}active{{end}} item" href="{{AppSubUrl}}/user/settings/applications">
 			{{.i18n.Tr "settings.applications"}}
 		</a>
+		<a class="{{if .PageIsSettingsTwoFactor}}active{{end}} item" href="{{AppSubUrl}}/user/settings/twofa">
+			{{.i18n.Tr "settings.two_factor"}}
+		</a>
 		<a class="{{if .PageIsSettingsDelete}}active{{end}} item" href="{{AppSubUrl}}/user/settings/delete">
 			{{.i18n.Tr "settings.delete"}}
 		</a>

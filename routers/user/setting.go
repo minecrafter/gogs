@@ -5,11 +5,17 @@
 package user
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"html/template"
+	"image/png"
 	"io/ioutil"
 	"strings"
 
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 	"github.com/Unknwon/com"
 
 	"github.com/gogits/gogs/models"
@@ -29,8 +35,9 @@ const (
 	SETTINGS_SOCIAL       base.TplName = "user/settings/social"
 	SETTINGS_APPLICATIONS base.TplName = "user/settings/applications"
 	SETTINGS_DELETE       base.TplName = "user/settings/delete"
+	SETTINGS_TWOFACTOR    base.TplName = "user/settings/two_factor"
 	NOTIFICATION          base.TplName = "user/notification"
-	SECURITY              base.TplName = "user/security"
+	TWOFACTOR_ENROLL      base.TplName = "user/settings/two_factor_enroll"
 )
 
 func Settings(ctx *middleware.Context) {
@@ -443,4 +450,173 @@ func SettingsDelete(ctx *middleware.Context) {
 	}
 
 	ctx.HTML(200, SETTINGS_DELETE)
+}
+
+func SettingsTwoFactor(ctx *middleware.Context) {
+	ctx.Data["Title"] = ctx.Tr("settings")
+	ctx.Data["PageIsSettingsTwoFactor"] = true
+
+	twofa, err := models.GetTwoFactorByUID(ctx.User.Id)
+	if err != nil {
+		// Not having two factor should not be fatal.
+		if !models.IsErrTwoFactorNotExist(err) {
+			ctx.Handle(500, "SettingsTwoFactor", err)
+			return
+		}
+	}
+	ctx.Data["Has2FA"] = twofa != nil
+
+	ctx.HTML(200, SETTINGS_TWOFACTOR)
+}
+
+func SettingsEnrollTwoFactor(ctx *middleware.Context) {
+	twofa, err := models.GetTwoFactorByUID(ctx.User.Id)
+	if err != nil {
+		// Not having two factor should not be fatal.
+		if !models.IsErrTwoFactorNotExist(err) {
+			ctx.Handle(500, "SettingsEnrollTwoFactor", err)
+			return
+		}
+	}
+
+	if twofa != nil {
+		// TODO: Need to handle the case where 2FA is enabled
+		return
+	}
+
+	// check if we already have TOTP
+	var key *otp.Key
+	urlInSession := ctx.Session.Get("twofaUrl")
+	if urlInSession != nil {
+		if url, ok := urlInSession.(string); ok {
+			// We will reuse
+			key, _ = otp.NewKeyFromURL(url)
+			// We'll just generate a new key instead if the deserialization fails
+		}
+	}
+
+	if key == nil {
+		// generate TOTP secret
+		opts := totp.GenerateOpts{
+			Issuer: setting.AppName,
+			AccountName: ctx.User.Name,
+		}
+		key, err = totp.Generate(opts)
+		if err != nil {
+			ctx.Handle(500, "SettingsEnrollTwoFactor", err)
+			return
+		}
+	}
+
+	// Generate an image
+	var output bytes.Buffer
+	image, err := key.Image(200, 200)
+	if err != nil {
+		ctx.Handle(500, "SettingsEnrollTwoFactor", err)
+		return
+	}
+
+	err = png.Encode(&output, image)
+	if err != nil {
+		ctx.Handle(500, "SettingsEnrollTwoFactor", err)
+		return
+	}
+
+	imgUrl := "data:image/png;base64," + base64.StdEncoding.EncodeToString(output.Bytes())
+	imgTag := "<img src=\"" + imgUrl + "\" alt=\"QR code\">"
+	ctx.Session.Set("twofaUrl", key.String())
+
+	ctx.Data["QRCodeImg"] = template.HTML(imgTag)
+	ctx.Data["Secret"] = key.Secret()
+
+	ctx.HTML(200, TWOFACTOR_ENROLL)
+}
+
+func SettingsEnrollTwoFactorPost(ctx *middleware.Context) {
+	ctx.Data["Title"] = ctx.Tr("settings")
+	ctx.Data["PageIsSettingsTwoFactor"] = true
+
+	twofa, err := models.GetTwoFactorByUID(ctx.User.Id)
+	if err != nil {
+		// Not having two factor should not be fatal.
+		if !models.IsErrTwoFactorNotExist(err) {
+			ctx.Handle(500, "SettingsEnrollTwoFactor", err)
+			return
+		}
+	}
+
+	if twofa != nil {
+		ctx.Flash.Error(ctx.Tr("settings.two_factor_already_active_error"))
+		return
+	}
+
+	// check if we already have TOTP
+	urlInSession := ctx.Session.Get("twofaUrl")
+	if urlInSession != nil {
+		if url, ok := urlInSession.(string); ok {
+			// We will reuse
+			key, err := otp.NewKeyFromURL(url)
+			if err != nil {
+				ctx.Handle(500, "SettingsEnrollTwoFactorPost", err)
+				return
+			}
+
+			code := ctx.Query("code")
+			if totp.Validate(code, key.Secret()) {
+				// Validation successful, register the authentication.
+				twofa := models.TwoFactor{
+					UID: ctx.User.Id,
+					Secret: key.Secret(),
+				}
+
+				if err = models.NewTwoFactor(&twofa); err != nil {
+					ctx.Handle(500, "SettingsEnrollTwoFactorPost", err)
+					return
+				}
+
+				ctx.Session.Delete("twofaUrl")
+				ctx.Flash.Success(ctx.Tr("settings.two_factor_enroll_success"))
+				ctx.Redirect(setting.AppSubUrl + "/user/settings/twofa")
+			} else {
+				ctx.Flash.Error(ctx.Tr("settings.two_factor_enroll_error_code"))
+				ctx.Redirect(setting.AppSubUrl + "/user/settings/twofa/enroll")
+			}
+		} else {
+			ctx.Handle(500, "SettingsEnrollTwoFactorPost", err)
+			return
+		}
+	}
+}
+
+func SettingsDisableTwoFactor(ctx *middleware.Context) {
+	if _, err := models.UserSignIn(ctx.User.Name, ctx.Query("password")); err != nil {
+		if models.IsErrUserNotExist(err) {
+			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_password"))
+		} else {
+			ctx.Flash.Error("UserSignIn: " + err.Error())
+		}
+
+		ctx.Redirect(setting.AppSubUrl + "/user/settings/twofa")
+	} else {
+		twofa, err := models.GetTwoFactorByUID(ctx.User.Id)
+		if err != nil {
+			if models.IsErrTwoFactorNotExist(err) {
+				ctx.Flash.Error(ctx.Tr("settings.two_factor_not_active_error"))
+			} else {
+				ctx.Flash.Error("GetTwoFactorByUID: " + err.Error())
+			}
+
+			ctx.Redirect(setting.AppSubUrl + "/user/settings/twofa")
+			return
+		}
+
+		err = models.DeleteTwoFactorByID(twofa.ID)
+		if err != nil {
+			ctx.Flash.Error("DeleteTwoFactorByID: " + err.Error())
+		} else {
+			ctx.Flash.Success(ctx.Tr("settings.two_factor_deactivated"))
+		}
+
+		ctx.Redirect(setting.AppSubUrl + "/user/settings/twofa")
+	}
 }

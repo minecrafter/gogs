@@ -582,6 +582,19 @@ func (err ErrAuthenticationNotExist) Error() string {
 	return fmt.Sprintf("authentication does not exist [id: %d]", err.ID)
 }
 
+type ErrTwoFactorNotExist struct {
+	UID int64
+}
+
+func IsErrTwoFactorNotExist(err error) bool {
+	_, ok := err.(ErrTwoFactorNotExist)
+	return ok
+}
+
+func (err ErrTwoFactorNotExist) Error() string {
+	return fmt.Sprintf("two factor does not exist [uid: %d]", err.UID)
+}
+
 // ___________
 // \__    ___/___ _____    _____
 //   |    |_/ __ \\__  \  /     \

@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/go-macaron/captcha"
+	"github.com/pquerna/otp/totp"
 
 	"github.com/gogits/gogs/models"
 	"github.com/gogits/gogs/modules/auth"
@@ -24,6 +25,7 @@ const (
 	ACTIVATE        base.TplName = "user/auth/activate"
 	FORGOT_PASSWORD base.TplName = "user/auth/forgot_passwd"
 	RESET_PASSWORD  base.TplName = "user/auth/reset_passwd"
+	TWO_FACTOR      base.TplName = "user/auth/two_factor"
 )
 
 func SignIn(ctx *middleware.Context) {
@@ -67,6 +69,23 @@ func SignInPost(ctx *middleware.Context, form auth.SignInForm) {
 		return
 	}
 
+	twofa, err := models.GetTwoFactorByUID(u.Id)
+	if err != nil {
+		// Not having two factor should not be fatal.
+		if !models.IsErrTwoFactorNotExist(err) {
+			ctx.Handle(500, "UserSignIn", err)
+			return
+		}
+	}
+
+	if twofa != nil {
+		// Break early since we don't want to issue the login now.
+		ctx.Session.Set("twofaUid", u.Id)
+		ctx.Session.Set("twofaRemember", form.Remember)
+		ctx.Redirect(setting.AppSubUrl + "/user/twofa")
+		return
+	}
+
 	if form.Remember {
 		days := 86400 * setting.LogInRememberDays
 		ctx.SetCookie(setting.CookieUserName, u.Name, days, setting.AppSubUrl)
@@ -83,6 +102,56 @@ func SignInPost(ctx *middleware.Context, form auth.SignInForm) {
 	}
 
 	ctx.Redirect(setting.AppSubUrl + "/")
+}
+
+func TwoFactor(ctx *middleware.Context) {
+	ctx.Data["Title"] = ctx.Tr("two_factor")
+
+	uid := ctx.Session.Get("twofaUid").(int64)
+	_, err := models.GetTwoFactorByUID(uid)
+	if err != nil {
+		ctx.Handle(500, "UserTwoFactor", err)
+		return
+	}
+
+	ctx.HTML(200, TWO_FACTOR)
+}
+
+func TwoFactorPost(ctx *middleware.Context, form auth.TwoFactorForm) {
+	ctx.Data["Title"] = ctx.Tr("two_factor")
+
+	uid := ctx.Session.Get("twofaUid").(int64)
+
+	twofa, err := models.GetTwoFactorByUID(uid)
+	if err != nil {
+		ctx.Handle(500, "UserTwoFactor", err)
+		return
+	}
+
+	// Make sure the user still exists, too.
+	u, err := models.GetUserByID(uid)
+	if err != nil {
+		ctx.Handle(500, "UserTwoFactor", err)
+		return
+	}
+
+	if totp.Validate(form.Code, twofa.Secret) {
+		// Fully authenticated!
+		ctx.Session.Delete("twofaUid")
+		ctx.Session.Set("uid", u.Id)
+		ctx.Session.Set("uname", u.Name)
+
+		if redirectTo, _ := url.QueryUnescape(ctx.GetCookie("redirect_to")); len(redirectTo) > 0 {
+			ctx.SetCookie("redirect_to", "", -1, setting.AppSubUrl)
+			ctx.Redirect(redirectTo)
+			return
+		}
+
+		ctx.Redirect(setting.AppSubUrl + "/")
+		return
+	}
+
+	ctx.RenderWithErr(ctx.Tr("auth.two_factor_failure"), TWO_FACTOR, form)
 }
 
 func SignOut(ctx *middleware.Context) {

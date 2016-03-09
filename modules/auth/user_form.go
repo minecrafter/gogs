@@ -143,3 +143,11 @@ type NewAccessTokenForm struct {
 func (f *NewAccessTokenForm) Validate(ctx *macaron.Context, errs binding.Errors) binding.Errors {
 	return validate(errs, ctx.Data, f, ctx.Locale)
 }
+
+type TwoFactorForm struct {
+	Code string `form:"code" binding:"Required"`
+}
+
+func (f *TwoFactorForm) Validate(ctx *macaron.Context, errs binding.Errors) binding.Errors {
+	return validate(errs, ctx.Data, f, ctx.Locale)
+}

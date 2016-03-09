@@ -212,6 +212,8 @@ func runWeb(ctx *cli.Context) {
 		m.Post("/sign_up", bindIgnErr(auth.RegisterForm{}), user.SignUpPost)
 		m.Get("/reset_password", user.ResetPasswd)
 		m.Post("/reset_password", user.ResetPasswdPost)
+		m.Get("/twofa", user.TwoFactor)
+		m.Post("/twofa", bindIgnErr(auth.TwoFactorForm{}), user.TwoFactorPost)
 	}, reqSignOut)
 
 	m.Group("/user/settings", func() {
@@ -231,6 +233,10 @@ func runWeb(ctx *cli.Context) {
 			Post(bindIgnErr(auth.NewAccessTokenForm{}), user.SettingsApplicationsPost)
 		m.Post("/applications/delete", user.SettingsDeleteApplication)
 		m.Route("/delete", "GET,POST", user.SettingsDelete)
+		m.Get("/twofa", user.SettingsTwoFactor)
+		m.Combo("/twofa/enroll").Get(user.SettingsEnrollTwoFactor).
+			Post(user.SettingsEnrollTwoFactorPost)
+		m.Post("/twofa/disable", user.SettingsDisableTwoFactor)
 	}, reqSignIn, func(ctx *middleware.Context) {
 		ctx.Data["PageIsUserSettings"] = true
 	})
